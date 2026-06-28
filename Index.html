@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QFlow — Booking & Queue System</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* Ticket pulse */
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+    70% { box-shadow: 0 0 0 16px rgba(99, 102, 241, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+  }
+  .pulse-ring { animation: pulse-ring 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite; }
+
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .slide-in { animation: slide-in 0.25s ease-out both; }
+
+  @keyframes count-up {
+    from { transform: scale(0.7); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  .count-up { animation: count-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+  @keyframes blink-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .blink { animation: blink-dot 1.4s ease-in-out infinite; }
+
+  .tab-active {
+    background: #4f46e5;
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(79,70,229,0.4);
+  }
+  .tab-inactive {
+    background: transparent;
+    color: #6b7280;
+  }
+  .tab-inactive:hover { background: #f3f4f6; color: #374151; }
+
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+  }
+
+  .status-badge-scheduled { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+  .status-badge-checked { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+  .status-badge-cancelled { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  .status-badge-in-queue { background: #fefce8; color: #92400e; border: 1px solid #fde68a; }
+
+  .btn-primary { background: #4f46e5; color: #fff; transition: all 0.15s; }
+  .btn-primary:hover { background: #4338ca; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79,70,229,0.35); }
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-success { background: #16a34a; color: #fff; transition: all 0.15s; }
+  .btn-success:hover { background: #15803d; }
+
+  .btn-danger { background: #dc2626; color: #fff; transition: all 0.15s; }
+  .btn-danger:hover { background: #b91c1c; }
+
+  .btn-outline { background: transparent; border: 1.5px solid #d1d5db; color: #374151; transition: all 0.15s; }
+  .btn-outline:hover { border-color: #6366f1; color: #4f46e5; background: #eff6ff; }
+
+  .btn-amber { background: #d97706; color: #fff; transition: all 0.15s; }
+  .btn-amber:hover { background: #b45309; }
+
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
+  .input-field {
+    width: 100%; border: 1.5px solid #d1d5db; border-radius: 8px;
+    padding: 10px 14px; font-size: 14px; background: #fff;
+    color: #111827; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .queue-row { transition: background 0.15s; }
+  .queue-row:hover { background: #f9fafb; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #f1f5f9; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+  @media (max-width: 640px) {
+    .admin-grid { grid-template-columns: 1fr !important; }
+    .customer-grid { grid-template-columns: 1fr !important; }
+  }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<!-- ═══ HEADER ═══ -->
+<header class="bg-white border-b border-gray-200 sticky top-0 z-30">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <span class="font-semibold text-gray-900 text-lg">QFlow</span>
+      <span class="hidden sm:inline text-gray-400 text-sm">— Booking & Queue</span>
+    </div>
+    <!-- Live indicator -->
+    <div class="flex items-center gap-1.5 text-xs text-gray-500">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 blink inline-block"></span>
+      Live
+    </div>
+  </div>
+</header>
+
+<!-- ═══ TAB SWITCHER ═══ -->
+<div class="max-w-5xl mx-auto px-4 pt-5">
+  <div class="inline-flex rounded-xl bg-gray-100 p-1 gap-1 w-full max-w-xs">
+    <button id="tab-customer" onclick="switchTab('customer')" class="tab-active flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all">
+      Customer
+    </button>
+    <button id="tab-admin" onclick="switchTab('admin')" class="tab-inactive flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all">
+      Admin
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- ═══ CUSTOMER VIEW ═══════════════════════════ -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="view-customer" class="max-w-5xl mx-auto px-4 py-5">
+
+  <div class="customer-grid grid gap-5" style="grid-template-columns: 1fr 1fr;">
+
+    <!-- LEFT: Booking Form -->
+    <div class="flex flex-col gap-4">
+
+      <!-- Book a Slot -->
+      <div class="card p-5 slide-in">
+        <h2 class="font-semibold text-gray-900 mb-0.5">Book a time slot</h2>
+        <p class="text-sm text-gray-500 mb-4">Reserve your spot in advance.</p>
+
+        <div class="flex flex-col gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Full name</label>
+            <input id="book-name" type="text" class="input-field" placeholder="Ahmad Al-Rashidi" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Phone number</label>
+            <input id="book-phone" type="tel" class="input-field" placeholder="+971 50 123 4567" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Preferred time</label>
+            <input id="book-time" type="time" class="input-field" />
+          </div>
+          <button onclick="handleBooking()" class="btn-primary rounded-xl px-4 py-2.5 text-sm font-semibold w-full mt-1">
+            Confirm booking
+          </button>
+        </div>
+      </div>
+
+      <!-- OR divider + Join Queue -->
+      <div class="flex items-center gap-3">
+        <div class="flex-1 h-px bg-gray-200"></div>
+        <span class="text-xs text-gray-400 font-medium">OR</span>
+        <div class="flex-1 h-px bg-gray-200"></div>
+      </div>
+
+      <div class="card p-5 slide-in" style="animation-delay:0.05s">
+        <h2 class="font-semibold text-gray-900 mb-0.5">Join the live queue</h2>
+        <p class="text-sm text-gray-500 mb-4">Skip scheduling — walk in and get a ticket now.</p>
+        <div class="flex flex-col gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Your name</label>
+            <input id="queue-name" type="text" class="input-field" placeholder="Sarah Johnson" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Phone number</label>
+            <input id="queue-phone" type="tel" class="input-field" placeholder="+971 55 987 6543" />
+          </div>
+          <button onclick="handleJoinQueue()" class="btn-outline rounded-xl px-4 py-2.5 text-sm font-semibold w-full border-indigo-300 text-indigo-600 hover:bg-indigo-50">
+            <span class="flex items-center justify-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+              Join queue now
+            </span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: Queue Tracker -->
+    <div class="flex flex-col gap-4">
+
+      <!-- NOW SERVING display — the signature element -->
+      <div class="card p-6 slide-in text-center" style="animation-delay:0.08s">
+        <p class="text-xs font-semibold uppercase tracking-widest text-indigo-400 mb-3">Now serving</p>
+        <div id="serving-display" class="w-24 h-24 rounded-full bg-indigo-50 border-2 border-indigo-200 flex items-center justify-center mx-auto mb-3 pulse-ring">
+          <span id="serving-number" class="mono text-4xl font-bold text-indigo-700">—</span>
+        </div>
+        <div class="flex justify-center gap-6 mt-3 text-sm">
+          <div class="text-center">
+            <p class="text-2xl font-bold text-gray-800 mono" id="c-queue-size">0</p>
+            <p class="text-xs text-gray-500 mt-0.5">in queue</p>
+          </div>
+          <div class="w-px bg-gray-200"></div>
+          <div class="text-center">
+            <p class="text-2xl font-bold text-gray-800 mono" id="c-booking-count">0</p>
+            <p class="text-xs text-gray-500 mt-0.5">booked today</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- My Ticket -->
+      <div id="my-ticket-panel" class="card p-5 slide-in hidden" style="animation-delay:0.12s">
+        <div class="flex items-start justify-between">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-widest text-amber-500 mb-1">Your ticket</p>
+            <p id="my-ticket-num" class="mono text-5xl font-bold text-gray-900 count-up">#—</p>
+            <p id="my-ticket-name" class="text-sm text-gray-500 mt-1"></p>
+          </div>
+          <div class="text-right">
+            <p class="text-xs text-gray-400 mb-1">Position</p>
+            <p id="my-position" class="text-3xl font-bold text-indigo-600 mono">—</p>
+            <p class="text-xs text-gray-400">ahead of you</p>
+          </div>
+        </div>
+        <div id="my-status-msg" class="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800"></div>
+      </div>
+
+      <!-- Queue list visible to customer -->
+      <div class="card p-5 slide-in" style="animation-delay:0.14s">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-semibold text-gray-800 text-sm">Live queue</h3>
+          <button onclick="refreshCustomerView()" class="text-xs text-indigo-500 hover:text-indigo-700 flex items-center gap-1">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Refresh
+          </button>
+        </div>
+        <div id="c-queue-list" class="flex flex-col gap-1.5 max-h-64 overflow-y-auto">
+          <p class="text-sm text-gray-400 text-center py-6">Queue is empty</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- ═══ ADMIN VIEW ══════════════════════════════ -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="view-admin" class="max-w-5xl mx-auto px-4 py-5 hidden">
+
+  <!-- Stats row -->
+  <div class="grid grid-cols-4 gap-3 mb-5" id="admin-stats-row">
+    <div class="card px-4 py-3">
+      <p class="text-xs text-gray-500">Bookings</p>
+      <p id="stat-bookings" class="text-2xl font-bold text-gray-900 mono">0</p>
+    </div>
+    <div class="card px-4 py-3">
+      <p class="text-xs text-gray-500">Checked in</p>
+      <p id="stat-checkedin" class="text-2xl font-bold text-emerald-600 mono">0</p>
+    </div>
+    <div class="card px-4 py-3">
+      <p class="text-xs text-gray-500">In queue</p>
+      <p id="stat-inqueue" class="text-2xl font-bold text-indigo-600 mono">0</p>
+    </div>
+    <div class="card px-4 py-3">
+      <p class="text-xs text-gray-500">Serving</p>
+      <p id="stat-serving" class="text-2xl font-bold text-amber-600 mono">—</p>
+    </div>
+  </div>
+
+  <div class="admin-grid grid gap-5" style="grid-template-columns: 1.6fr 1fr;">
+
+    <!-- LEFT: Bookings -->
+    <div class="card p-5 slide-in flex flex-col" style="min-height:480px">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold text-gray-900">Scheduled bookings</h2>
+        <span id="booking-count-badge" class="text-xs bg-indigo-100 text-indigo-700 font-semibold px-2 py-0.5 rounded-full">0</span>
+      </div>
+      <div id="admin-bookings-list" class="flex flex-col gap-2 flex-1 overflow-y-auto max-h-96">
+        <div class="text-center py-12 text-gray-400 text-sm">No bookings yet.</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Queue Control -->
+    <div class="flex flex-col gap-4">
+
+      <!-- Serving panel -->
+      <div class="card p-5 slide-in text-center" style="animation-delay:0.06s">
+        <p class="text-xs font-semibold uppercase tracking-widest text-indigo-400 mb-2">Currently serving</p>
+        <div id="a-serving-display" class="w-20 h-20 rounded-full bg-indigo-600 flex items-center justify-center mx-auto mb-2 pulse-ring">
+          <span id="a-serving-number" class="mono text-3xl font-bold text-white">—</span>
+        </div>
+        <p id="a-serving-name" class="text-sm text-gray-600 mb-4">No one yet</p>
+        <button onclick="nextCustomer()" class="btn-success rounded-xl px-4 py-3 text-sm font-semibold w-full flex items-center justify-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Next customer
+        </button>
+        <button onclick="resetQueue()" class="btn-outline rounded-xl px-4 py-2.5 text-sm font-medium w-full mt-2">
+          Reset queue
+        </button>
+      </div>
+
+      <!-- Queue list (admin) -->
+      <div class="card p-5 slide-in flex flex-col" style="animation-delay:0.1s">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-semibold text-gray-800 text-sm">Queue</h3>
+          <span id="a-queue-count" class="text-xs bg-amber-100 text-amber-700 font-semibold px-2 py-0.5 rounded-full">0</span>
+        </div>
+        <div id="admin-queue-list" class="flex flex-col gap-1.5 overflow-y-auto max-h-64">
+          <p class="text-sm text-gray-400 text-center py-6">Queue is empty</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ TOAST ═══ -->
+<div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+<!-- ═══ CONFIRM MODAL ═══ -->
+<div id="modal-overlay" class="hidden fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+  <div class="card p-6 w-full max-w-sm slide-in">
+    <h3 id="modal-title" class="font-semibold text-gray-900 mb-2">Confirm action</h3>
+    <p id="modal-body" class="text-sm text-gray-600 mb-5">Are you sure?</p>
+    <div class="flex gap-3">
+      <button onclick="closeModal()" class="btn-outline rounded-lg px-4 py-2 text-sm font-medium flex-1">Cancel</button>
+      <button id="modal-confirm-btn" class="btn-danger rounded-lg px-4 py-2 text-sm font-semibold flex-1">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ -->
+<!-- ═══ JAVASCRIPT STATE ════ -->
+<!-- ═══════════════════════════ -->
+<script>
+// ─── State ───────────────────────────────────────────
+const state = {
+  bookings: [],       // {id, name, phone, time, status}
+  queue: [],          // {ticketNum, name, phone, joinedAt}
+  currentTicket: 0,   // ticket # currently being served (0 = none)
+  nextTicketNum: 1,
+  myTicket: null,     // {ticketNum, name}
+  currentTab: 'customer',
+  _bookingIdCounter: 1,
+};
+
+// ─── Seed data ───────────────────────────────────────
+function seedData() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const t = h => `${pad(h)}:00`;
+  const hour = now.getHours();
+
+  state.bookings = [
+    { id: state._bookingIdCounter++, name: 'Mohammed Al-Farsi', phone: '+971 50 234 5678', time: t(Math.max(hour,9)), status: 'scheduled' },
+    { id: state._bookingIdCounter++, name: 'Priya Nair', phone: '+971 55 876 5432', time: t(Math.max(hour,10)), status: 'checked-in' },
+    { id: state._bookingIdCounter++, name: 'David Chen', phone: '+971 54 321 9876', time: t(Math.max(hour,11)), status: 'scheduled' },
+    { id: state._bookingIdCounter++, name: 'Fatima Hassan', phone: '+971 56 654 3210', time: t(Math.max(hour,12)), status: 'cancelled' },
+  ];
+
+  // seed 2 queue entries
+  state.queue = [
+    { ticketNum: 1, name: 'Omar Khalid', phone: '+971 58 111 2233', joinedAt: new Date(Date.now()-600000) },
+    { ticketNum: 2, name: 'Aisha Rahman', phone: '+971 52 445 6677', joinedAt: new Date(Date.now()-300000) },
+  ];
+  state.nextTicketNum = 3;
+  state.currentTicket = 1;
+}
+
+// ─── Tab switching ─────────────────────────────────
+function switchTab(tab) {
+  state.currentTab = tab;
+  document.getElementById('view-customer').classList.toggle('hidden', tab !== 'customer');
+  document.getElementById('view-admin').classList.toggle('hidden', tab !== 'admin');
+  document.getElementById('tab-customer').className = tab === 'customer' ? 'tab-active flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all' : 'tab-inactive flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all';
+  document.getElementById('tab-admin').className = tab === 'admin' ? 'tab-active flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all' : 'tab-inactive flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all';
+  render();
+}
+
+// ─── Booking ────────────────────────────────────────
+function handleBooking() {
+  const name = document.getElementById('book-name').value.trim();
+  const phone = document.getElementById('book-phone').value.trim();
+  const time = document.getElementById('book-time').value;
+  if (!name) { showToast('Enter your name.', 'error'); return; }
+  if (!phone) { showToast('Enter your phone number.', 'error'); return; }
+  if (!time) { showToast('Pick a preferred time.', 'error'); return; }
+
+  const booking = { id: state._bookingIdCounter++, name, phone, time, status: 'scheduled' };
+  state.bookings.push(booking);
+  showToast(`Booking confirmed for ${name} at ${formatTime(time)}!`, 'success');
+  document.getElementById('book-name').value = '';
+  document.getElementById('book-phone').value = '';
+  document.getElementById('book-time').value = '';
+  render();
+}
+
+// ─── Join Queue ─────────────────────────────────────
+function handleJoinQueue() {
+  const name = document.getElementById('queue-name').value.trim();
+  const phone = document.getElementById('queue-phone').value.trim();
+  if (!name) { showToast('Enter your name to join the queue.', 'error'); return; }
+  if (!phone) { showToast('Enter your phone number.', 'error'); return; }
+
+  const ticketNum = state.nextTicketNum++;
+  const entry = { ticketNum, name, phone, joinedAt: new Date() };
+  state.queue.push(entry);
+  state.myTicket = { ticketNum, name };
+  showToast(`Ticket #${ticketNum} issued! Welcome, ${name}.`, 'success');
+  document.getElementById('queue-name').value = '';
+  document.getElementById('queue-phone').value = '';
+  render();
+}
+
+// ─── Admin: Next Customer ────────────────────────────
+function nextCustomer() {
+  if (state.queue.length === 0) { showToast('The queue is empty.', 'info'); return; }
+  const next = state.queue.shift();
+  state.currentTicket = next.ticketNum;
+  showToast(`Now serving ticket #${next.ticketNum} — ${next.name}`, 'success');
+  render();
+}
+
+// ─── Admin: Reset Queue ──────────────────────────────
+function resetQueue() {
+  showConfirm(
+    'Reset the queue?',
+    'This will clear all waiting customers and reset the ticket counter.',
+    () => {
+      state.queue = [];
+      state.currentTicket = 0;
+      state.nextTicketNum = 1;
+      state.myTicket = null;
+      showToast('Queue has been reset.', 'info');
+      render();
+    },
+    'Reset queue',
+    'btn-danger'
+  );
+}
+
+// ─── Admin: Check-in Booking ─────────────────────────
+function checkInBooking(id) {
+  const b = state.bookings.find(x => x.id === id);
+  if (!b) return;
+  b.status = 'checked-in';
+  // Also add to live queue
+  const ticketNum = state.nextTicketNum++;
+  state.queue.push({ ticketNum, name: b.name, phone: b.phone, joinedAt: new Date() });
+  showToast(`${b.name} checked in — ticket #${ticketNum} issued.`, 'success');
+  render();
+}
+
+// ─── Admin: Cancel Booking ───────────────────────────
+function cancelBooking(id) {
+  const b = state.bookings.find(x => x.id === id);
+  if (!b) return;
+  showConfirm(
+    `Cancel ${b.name}'s booking?`,
+    `This will remove their scheduled slot at ${formatTime(b.time)}.`,
+    () => {
+      b.status = 'cancelled';
+      showToast(`Booking for ${b.name} cancelled.`, 'info');
+      render();
+    },
+    'Cancel booking',
+    'btn-danger'
+  );
+}
+
+// ─── Refresh customer queue view ─────────────────────
+function refreshCustomerView() { render(); showToast('Queue refreshed.', 'info'); }
+
+// ─── Helpers ─────────────────────────────────────────
+function formatTime(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+
+function timeAgo(date) {
+  const diff = Math.round((Date.now() - date) / 60000);
+  if (diff < 1) return 'just now';
+  if (diff === 1) return '1 min ago';
+  return `${diff} mins ago`;
+}
+
+function getInitials(name) {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+}
+
+const avatarColors = ['bg-indigo-100 text-indigo-700','bg-emerald-100 text-emerald-700','bg-amber-100 text-amber-700','bg-rose-100 text-rose-700','bg-cyan-100 text-cyan-700','bg-violet-100 text-violet-700'];
+function avatarColor(name) { return avatarColors[name.charCodeAt(0) % avatarColors.length]; }
+
+// ─── RENDER ──────────────────────────────────────────
+function render() {
+  renderCustomerView();
+  renderAdminView();
+}
+
+function renderCustomerView() {
+  const serving = state.currentTicket || '—';
+  document.getElementById('serving-number').textContent = serving;
+  document.getElementById('c-queue-size').textContent = state.queue.length;
+  document.getElementById('c-booking-count').textContent = state.bookings.filter(b => b.status !== 'cancelled').length;
+
+  // My ticket panel
+  const mp = document.getElementById('my-ticket-panel');
+  if (state.myTicket) {
+    mp.classList.remove('hidden');
+    document.getElementById('my-ticket-num').textContent = `#${state.myTicket.ticketNum}`;
+    document.getElementById('my-ticket-name').textContent = state.myTicket.name;
+    const idx = state.queue.findIndex(q => q.ticketNum === state.myTicket.ticketNum);
+    if (idx === -1) {
+      // being served or already done
+      document.getElementById('my-position').textContent = '0';
+      document.getElementById('my-status-msg').textContent = state.currentTicket === state.myTicket.ticketNum
+        ? '🎉 You\'re being served now! Please proceed to the counter.'
+        : 'Your turn has passed. Thank you for visiting!';
+    } else {
+      document.getElementById('my-position').textContent = idx;
+      document.getElementById('my-status-msg').textContent = idx === 0
+        ? '⚡ You\'re next! Get ready to be called.'
+        : `${idx} customer${idx > 1 ? 's' : ''} ahead of you. We\'ll call your number soon.`;
+    }
+  } else {
+    mp.classList.add('hidden');
+  }
+
+  // Customer queue list
+  const cql = document.getElementById('c-queue-list');
+  if (state.queue.length === 0) {
+    cql.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">Queue is empty</p>';
+  } else {
+    cql.innerHTML = state.queue.map((q, i) => `
+      <div class="queue-row flex items-center gap-3 px-3 py-2 rounded-lg ${state.myTicket && q.ticketNum === state.myTicket.ticketNum ? 'bg-indigo-50 border border-indigo-200' : ''}">
+        <span class="text-xs font-bold mono text-gray-400 w-5">${i+1}</span>
+        <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${avatarColor(q.name)}">${getInitials(q.name)}</div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-gray-800 truncate">${q.name}</p>
+          <p class="text-xs text-gray-400">Ticket #${q.ticketNum} · ${timeAgo(q.joinedAt)}</p>
+        </div>
+        ${state.myTicket && q.ticketNum === state.myTicket.ticketNum ? '<span class="text-xs bg-indigo-600 text-white font-semibold px-2 py-0.5 rounded-full shrink-0">You</span>' : ''}
+      </div>
+    `).join('');
+  }
+}
+
+function renderAdminView() {
+  // Stats
+  const booked = state.bookings.filter(b => b.status === 'scheduled').length;
+  const checkedIn = state.bookings.filter(b => b.status === 'checked-in').length;
+  document.getElementById('stat-bookings').textContent = booked;
+  document.getElementById('stat-checkedin').textContent = checkedIn;
+  document.getElementById('stat-inqueue').textContent = state.queue.length;
+  document.getElementById('stat-serving').textContent = state.currentTicket || '—';
+
+  // Serving display (admin)
+  const aNum = document.getElementById('a-serving-number');
+  const aName = document.getElementById('a-serving-name');
+  if (state.currentTicket > 0) {
+    aNum.textContent = state.currentTicket;
+    // find name in original queue — we removed it, so we look in all joined ever
+    // We'll store current serving name in state
+    aName.textContent = state._servingName || 'Serving…';
+  } else {
+    aNum.textContent = '—';
+    aName.textContent = 'No one yet';
+  }
+
+  // Booking count badge
+  document.getElementById('booking-count-badge').textContent = state.bookings.length;
+
+  // Admin bookings list
+  const abl = document.getElementById('admin-bookings-list');
+  if (state.bookings.length === 0) {
+    abl.innerHTML = '<div class="text-center py-12 text-gray-400 text-sm">No bookings yet.</div>';
+  } else {
+    const sorted = [...state.bookings].sort((a,b) => a.time.localeCompare(b.time));
+    abl.innerHTML = sorted.map(b => {
+      const statusClass = { scheduled: 'status-badge-scheduled', 'checked-in': 'status-badge-checked', cancelled: 'status-badge-cancelled' }[b.status];
+      const statusLabel = { scheduled: 'Scheduled', 'checked-in': 'Checked in', cancelled: 'Cancelled' }[b.status];
+      const canCheckin = b.status === 'scheduled';
+      const canCancel = b.status === 'scheduled';
+      return `
+        <div class="flex items-center gap-3 px-3 py-3 rounded-xl border border-gray-100 bg-gray-50 hover:bg-white hover:border-gray-200 transition-all">
+          <div class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${avatarColor(b.name)}">${getInitials(b.name)}</div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-gray-800 truncate">${b.name}</p>
+            <p class="text-xs text-gray-500">${formatTime(b.time)} · ${b.phone}</p>
+          </div>
+          <span class="text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${statusClass}">${statusLabel}</span>
+          <div class="flex gap-1.5 shrink-0">
+            ${canCheckin ? `<button onclick="checkInBooking(${b.id})" class="btn-success text-xs rounded-lg px-2.5 py-1.5 font-medium" title="Check in">Check in</button>` : ''}
+            ${canCancel ? `<button onclick="cancelBooking(${b.id})" class="btn-outline text-xs rounded-lg px-2.5 py-1.5 font-medium text-red-600 border-red-200 hover:bg-red-50" title="Cancel">Cancel</button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Admin queue list
+  const aql = document.getElementById('admin-queue-list');
+  document.getElementById('a-queue-count').textContent = state.queue.length;
+  if (state.queue.length === 0) {
+    aql.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">Queue is empty</p>';
+  } else {
+    aql.innerHTML = state.queue.map((q, i) => `
+      <div class="queue-row flex items-center gap-3 px-3 py-2 rounded-lg">
+        <span class="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0">${i+1}</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-gray-800 truncate">${q.name}</p>
+          <p class="text-xs text-gray-400">Ticket #${q.ticketNum} · ${timeAgo(q.joinedAt)}</p>
+        </div>
+        ${i === 0 ? '<span class="text-xs bg-emerald-100 text-emerald-700 font-semibold px-2 py-0.5 rounded-full shrink-0">Next</span>' : ''}
+      </div>
+    `).join('');
+  }
+}
+
+// ─── Override nextCustomer to save name ──────────────
+const _origNextCustomer = nextCustomer;
+function nextCustomer() {
+  if (state.queue.length === 0) { showToast('The queue is empty.', 'info'); return; }
+  const next = state.queue.shift();
+  state.currentTicket = next.ticketNum;
+  state._servingName = next.name;
+  showToast(`Now serving ticket #${next.ticketNum} — ${next.name}`, 'success');
+  // Animate number
+  const el = document.getElementById('a-serving-number');
+  el.classList.remove('count-up');
+  void el.offsetWidth;
+  el.classList.add('count-up');
+  render();
+}
+
+// ─── Toast ────────────────────────────────────────────
+function showToast(msg, type = 'info') {
+  const colors = { success: 'bg-emerald-600', error: 'bg-red-600', info: 'bg-slate-700' };
+  const icons = {
+    success: '<path d="M20 6L9 17l-5-5"/>', error: '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
+  };
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `${colors[type]} text-white text-sm font-medium px-4 py-3 rounded-xl flex items-center gap-2.5 pointer-events-auto slide-in`;
+  el.style.minWidth = '240px';
+  el.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${icons[type]}</svg><span>${msg}</span>`;
+  container.appendChild(el);
+  setTimeout(() => { el.style.opacity='0'; el.style.transform='translateY(8px)'; el.style.transition='all 0.3s'; setTimeout(()=>el.remove(),300); }, 3500);
+}
+
+// ─── Confirm modal ────────────────────────────────────
+let _onConfirm = null;
+function showConfirm(title, body, onConfirm, btnLabel = 'Confirm', btnClass = 'btn-danger') {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').textContent = body;
+  const btn = document.getElementById('modal-confirm-btn');
+  btn.textContent = btnLabel;
+  btn.className = `${btnClass} rounded-lg px-4 py-2 text-sm font-semibold flex-1`;
+  _onConfirm = onConfirm;
+  document.getElementById('modal-overlay').classList.remove('hidden');
+}
+function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); _onConfirm = null; }
+document.getElementById('modal-confirm-btn').addEventListener('click', () => { if (_onConfirm) _onConfirm(); closeModal(); });
+document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target === document.getElementById('modal-overlay')) closeModal(); });
+
+// ─── Init ─────────────────────────────────────────────
+seedData();
+render();
+</script>
+</body>
+</html>
